@@ -1,0 +1,105 @@
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+  required_version = ">= 1.3.0"
+}
+
+provider "aws" {
+  region = "us-east-2"
+}
+
+# Data source for the current AWS account and caller identity
+locals {
+  tags = {
+    Environment = "dev"
+    ManagedBy   = "terraform"
+  }
+}
+
+# IAM execution role for SageMaker Notebook Instance
+resource "aws_iam_role" "sagemaker_execution_role" {
+  name = "sagemaker-notebook-execution-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Principal = {
+          Service = "sagemaker.amazonaws.com"
+        }
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+
+  tags = local.tags
+}
+
+resource "aws_iam_role_policy" "sagemaker_execution_policy" {
+  name = "sagemaker-notebook-execution-policy"
+  role = aws_iam_role.sagemaker_execution_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:ListBucket"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "sagemaker_full_access" {
+  role       = aws_iam_role.sagemaker_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
+}
+
+# SageMaker Notebook Instance
+resource "aws_sagemaker_notebook_instance" "main" {
+  name                   = "ml-g5-2xlarge-notebook"
+  role_arn               = aws_iam_role.sagemaker_execution_role.arn
+  instance_type          = "ml.g5.2xlarge"
+  # instance_type          = "ml.t3.medium"  
+  volume_size            = 50
+  direct_internet_access = "Enabled"
+  instance_metadata_service_configuration {
+    minimum_instance_metadata_service_version = "2"
+  }
+
+  tags = local.tags
+}
+
+output "sagemaker_notebook_instance_name" {
+  description = "Name of the SageMaker Notebook Instance"
+  value       = aws_sagemaker_notebook_instance.main.name
+}
+
+output "sagemaker_notebook_instance_url" {
+  description = "URL of the SageMaker Notebook Instance"
+  value       = aws_sagemaker_notebook_instance.main.url
+}
+
+output "sagemaker_execution_role_arn" {
+  description = "ARN of the SageMaker execution IAM role"
+  value       = aws_iam_role.sagemaker_execution_role.arn
+}
