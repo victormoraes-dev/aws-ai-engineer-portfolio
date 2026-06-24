@@ -1,4 +1,4 @@
-# Week 1, Day 1 — Complete Review: Foundations of AI Engineering
+# Week 1, Day 1 — Review: Foundations of AI Engineering
 
 *Study reference for the AWS Certified Machine Learning Engineer - Associate (MLA-C01)*
 
@@ -12,14 +12,10 @@
 4. [GPU VRAM Physics & Quantization](#4-gpu-vram-physics--quantization)
 5. [RAG Architecture](#5-rag-architecture-retrieval-augmented-generation)
 6. [PyTorch Learning Ladder](#6-pytorch-learning-ladder)
-7. [Infrastructure as Code (Terraform)](#7-infrastructure-as-code-terraform)
-8. [AWS Service Quotas](#8-aws-service-quotas)
-9. [GPU Validation Script](#9-gpu-validation-script)
-10. [Git & SSH Configuration](#10-git--ssh-configuration)
-11. [Full Inference Code (Ready for GPU)](#11-full-inference-code-ready-for-gpu)
-12. [Key Certification Takeaways (MLA-C01)](#12-key-certification-takeaways-mla-c01)
-13. [Glossary](#13-glossary)
-14. [Daily LinkedIn Post](#14-daily-linkedin-post-build-in-public)
+7. [GPU Validation Script](#7-gpu-validation-script)
+8. [inference.py — Line-by-Line Breakdown](#8-inferencepy--line-by-line-breakdown)
+9. [Key Certification Takeaways (MLA-C01)](#9-key-certification-takeaways-mla-c01)
+10. [Glossary](#10-glossary)
 
 ---
 
@@ -94,44 +90,17 @@ The lifecycle of a single prompt through Llama-3:
 "Hello world"  →  Tokenizer  →  [15043, 3186]  →  Model (GPU)  →  [2990]  →  Tokenizer  →  "!"
 ```
 
-### Step-by-Step Execution
+**Step 1: Tokenization** — `AutoTokenizer` converts raw text into Token IDs (integers). Llama-3 uses a BPE tokenizer with ~32,000 tokens in vocabulary.
 
-**Step 1: Tokenization**
-- The Hugging Face `AutoTokenizer` converts raw text into **Token IDs** (integers)
-- Llama-3 uses a BPE tokenizer with ~32,000 tokens in vocabulary
+**Step 2: Embedding Lookup** — Each Token ID is mapped to a dense vector of dimension **4096**.
 
-```python
-from transformers import AutoTokenizer
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B")
-tokens = tokenizer("Hello world", return_tensors="pt")
-# tokens["input_ids"] = tensor([[15043, 3186]])
-```
+**Step 3: Decoder Layers** — The input passes through **32 Transformer Decoder layers**. Each layer contains: Masked Multi-Head Self-Attention + Feed-Forward Network (SwiGLU) + Residual connections + LayerNorm.
 
-**Step 2: Embedding Lookup**
-- Each Token ID is mapped to a dense vector of dimension **4096**
+**Step 4: Output Projection (LM Head)** — The final hidden state passes through `nn.Linear(4096, 32000)` producing **logits** — raw scores for each token in the vocabulary.
 
-**Step 3: Decoder Layers**
-- The input passes through **32 Transformer Decoder layers**
-- Each layer contains: Masked Multi-Head Self-Attention + Feed-Forward Network (SwiGLU) + Residual connections + LayerNorm
+**Step 5: Softmax & Sampling** — Logits are converted to probabilities via softmax. The next token is selected (Greedy, Top-K, or Temperature sampling).
 
-**Step 4: Output Projection (LM Head)**
-- The final hidden state passes through `nn.Linear(4096, 32000)` producing **logits** — raw scores for each token in the vocabulary
-
-**Step 5: Softmax & Sampling**
-- Logits are converted to probabilities via softmax
-- The next token is selected (Greedy, Top-K, or Temperature sampling)
-
-**Step 6: Auto-Regressive Loop**
-- The predicted token is appended to the input sequence
-- Steps 1-5 repeat until `<|end_of_text|>` is generated
-
-```python
-from transformers import AutoModelForCausalLM
-
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Meta-Llama-3-8B")
-input_ids = tokenizer("Hello world", return_tensors="pt").input_ids
-output = model.generate(input_ids, max_new_tokens=100)
-```
+**Step 6: Auto-Regressive Loop** — The predicted token is appended to the input sequence. Steps 1–5 repeat until `<|end_of_text|>` is generated.
 
 ---
 
@@ -161,27 +130,7 @@ This is the **primary cause of CUDA Out of Memory (OOM) errors** during long con
 
 ### Solution: 4-bit Quantization (NF4)
 
-Uses the `bitsandbytes` library to compress model weights to 4-bit NormalFloat (NF4) precision:
-
-```python
-from transformers import BitsAndBytesConfig
-import torch
-
-quantization_config = BitsAndBytesConfig(
-    load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16,
-    bnb_4bit_quant_type="nf4",
-    bnb_4bit_use_double_quant=True
-)
-
-model = AutoModelForCausalLM.from_pretrained(
-    "meta-llama/Meta-Llama-3-8B",
-    quantization_config=quantization_config,
-    device_map="auto"
-)
-```
-
-**Result:** Model compresses from ~16 GB to ~4 GB, freeing **~12 GB of VRAM** for the KV Cache and long context windows.
+Uses the `bitsandbytes` library to compress model weights from ~16 GB to ~4 GB, freeing **~12 GB of VRAM** for the KV Cache and long context windows.
 
 ### Target Hardware
 
@@ -296,13 +245,11 @@ import torch.nn as nn
 class MyModel(nn.Module):
     def __init__(self):
         super().__init__()
-        # __init__: Declare ALL building blocks (layers)
         self.layer1 = nn.Linear(4096, 4096)
         self.dropout = nn.Dropout(0.1)
         self.layer2 = nn.Linear(4096, 32000)
 
     def forward(self, x):
-        # forward: Define the EXACT execution pipeline
         x = self.layer1(x)
         x = torch.relu(x)
         x = self.dropout(x)
@@ -310,12 +257,10 @@ class MyModel(nn.Module):
         return x
 ```
 
-**Analogy:**
-
 | PyTorch Concept | Real-World Analogy |
 |---|---|
 | `nn.Module` | Architectural Blueprint |
-| `__init__` | Materials list (2x4 lumber, wiring, drywall) |
+| `__init__` | Materials list (lumber, wiring, drywall) |
 | `forward` | Construction sequence (frame → wire → drywall) |
 | `.parameters()` | Inventory of all materials used |
 | `.to("cuda")` | Moving construction to a specialized facility |
@@ -334,174 +279,9 @@ class LlamaForCausalLM(nn.Module):
         return logits
 ```
 
-**Critical Methods Before Inference:**
-
-```python
-# Thing 1: Disable Dropout and BatchNorm training behavior
-model.eval()
-
-# Thing 2: Disable Autograd to prevent building Computation Graph
-with torch.no_grad():
-    output = model.generate(input_ids, max_new_tokens=100)
-```
-
-| Method | What It Does | Why It's Needed |
-|---|---|---|
-| `model.eval()` | Disables Dropout, fixes BatchNorm | Without it, Dropout randomly deactivates neurons → non-deterministic garbage outputs |
-| `torch.no_grad()` | Prevents building Computation Graph | Without it, Autograd wastes VRAM that should go to KV Cache → OOM crashes |
-
 ---
 
-## 7. Infrastructure as Code (Terraform)
-
-### Repository Structure (Monorepo)
-
-```
-ai-engineer-portfolio/
-├── infrastructure/
-│   ├── main.tf              # Terraform configuration
-│   ├── variables.tf          # Input variables
-│   └── outputs.tf            # Output values
-├── notebooks/
-│   ├── inference.ipynb       # PyTorch inference notebook
-│   └── fine-tuning.ipynb     # LoRA fine-tuning notebook
-├── data/
-│   ├── raw/                  # Raw datasets
-│   └── processed/            # Tokenized datasets
-├── src/
-│   ├── train.py              # Training script
-│   └── inference.py          # Inference script
-├── README.md                 # Project documentation
-└── .gitignore
-```
-
-### Terraform Configuration
-
-```hcl
-provider "aws" {
-  region = var.aws_region
-}
-
-resource "aws_sagemaker_notebook_instance" "ai_engineer_notebook" {
-  name          = "ai-engineer-sprint"
-  role_arn      = aws_iam_role.sagemaker_role.arn
-  instance_type = var.instance_type  # "ml.g5.2xlarge" or "ml.t3.medium"
-
-  lifecycle_config_name = aws_sagemaker_notebook_instance_lifecycle_configuration.stop_on_idle.name
-
-  tags = {
-    Name     = "AI Engineer Sprint"
-    Project  = "Week-1-FineTuning"
-    Ephemeral = "True"
-  }
-}
-```
-
-### IAM Execution Role
-
-```hcl
-resource "aws_iam_role" "sagemaker_role" {
-  name = "sagemaker-execution-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action = "sts:AssumeRole"
-      Effect = "Allow"
-      Principal = {
-        Service = "sagemaker.amazonaws.com"
-      }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "sagemaker_full_access" {
-  role       = aws_iam_role.sagemaker_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
-}
-
-resource "aws_iam_role_policy_attachment" "s3_access" {
-  role       = aws_iam_role.sagemaker_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess"
-}
-```
-
-### Deploy Commands
-
-```bash
-terraform init
-terraform plan
-terraform apply -auto-approve
-terraform destroy  # Destroy after session to save costs
-```
-
-### Cost Management (AWS Budgets)
-
-```hcl
-resource "aws_budgets_budget" "ml_cost" {
-  name              = "ml-engineer-monthly-budget"
-  budget_type       = "COST"
-  limit_amount      = "100"
-  limit_unit        = "USD"
-  time_unit         = "MONTHLY"
-
-  notification {
-    comparison_operator        = "GREATER_THAN"
-    threshold                  = 80
-    threshold_type             = "PERCENTAGE"
-    notification_type          = "ACTUAL"
-    subscriber_email_addresses = ["your-email@example.com"]
-  }
-}
-```
-
----
-
-## 8. AWS Service Quotas
-
-### The Problem
-
-AWS restricts GPU instance quotas (`G and VT instance families`) by default. New accounts typically have a quota of **0** for `ml.g5.2xlarge`.
-
-### The Solution
-
-Request a quota increase via **AWS Service Quotas** console or AWS Support with a detailed technical justification.
-
-### Sample Quota Increase Request
-
-```
-Subject: Service limit increase request - ml.g5.2xlarge for notebook instance usage
-
-I am preparing for the AWS Certified Machine Learning Engineer - Associate (MLA-C01)
-exam and building a professional MLOps portfolio.
-
-1. The Workload:
-Fine-tuning Llama-3 8B using 4-bit quantization (NF4 via BitsAndBytes) and
-PEFT/LoRA adapters on a custom JSONL dataset.
-
-2. Why ml.g5.2xlarge:
-The instance provides a single NVIDIA A10G GPU with 24 GB VRAM. The 4-bit
-quantized 8B model consumes ~6 GB VRAM, leaving remaining memory for KV Cache
-and LoRA training weights.
-
-3. Cost Control:
-Infrastructure managed via Terraform (IaC). Instance is ephemeral — provisioned
-for 2-4 hour daily sessions and destroyed after. AWS Budgets and billing alarms
-are configured.
-```
-
-### GPU Instance Comparison for MLA-C01
-
-| Instance | GPU | CUDA Cores | VRAM | Best For |
-|---|---|---|---|---|
-| `ml.g5.2xlarge` | NVIDIA A10G | 9,216 | 24 GB | Fine-tuning 7B-13B |
-| `ml.p3.2xlarge` | NVIDIA V100 | 5,120 | 16 GB | Older gen, cheaper |
-| `ml.p4d.24xlarge` | NVIDIA A100 | 6,912 | 40 GB | Large-scale training |
-| `ml.p5.48xlarge` | NVIDIA H100 | 18,432 | 80 GB | Enterprise foundation models |
-
----
-
-## 9. GPU Validation Script
+## 7. GPU Validation Script
 
 Run this inside a SageMaker PyTorch notebook to verify CUDA availability:
 
@@ -534,38 +314,15 @@ check_cuda()
 
 ---
 
-## 10. Git & SSH Configuration
+## 8. inference.py — Line-by-Line Breakdown
 
-### Repository Initialization
+The script answers one question: **"Given a text prompt, how do I get a response from Llama-3 8B on a GPU?"**
 
-```bash
-git init
-git add .
-git commit -m "Initial commit: Week 1 Day 1 - Foundations"
-git branch -M main
-git remote add origin git@github.com:YOUR_USERNAME/ai-engineer-portfolio.git
-git push -u origin main
-```
-
-### SSH Key Configuration (Multiple GitHub Accounts)
-
-```bash
-# ~/.ssh/config
-Host github.com-ai-engineer
-    HostName github.com
-    User git
-    IdentityFile ~/.ssh/id_ed25519_ai_engineer
-    IdentitiesOnly yes
-
-# Clone with custom host
-git clone git@github.com-ai-engineer:YOUR_USERNAME/ai-engineer-portfolio.git
-```
+Flow: configure memory → load model → set inference mode → tokenize input → generate output → decode output.
 
 ---
 
-## 11. Full Inference Code (Ready for GPU)
-
-When the GPU quota is approved, run this complete script:
+### Imports
 
 ```python
 import torch
@@ -574,16 +331,42 @@ from transformers import (
     AutoModelForCausalLM,
     BitsAndBytesConfig
 )
+```
 
-# Step 1: Configure 4-bit quantization
+| Import | What it is |
+|---|---|
+| `torch` | PyTorch — handles all tensor math and GPU communication |
+| `AutoTokenizer` | Loads the correct tokenizer for any Hugging Face model automatically |
+| `AutoModelForCausalLM` | Loads a Causal Language Model (text generation) |
+| `BitsAndBytesConfig` | Configuration for 4-bit quantization via the `bitsandbytes` library |
+
+---
+
+### Step 1 — Configure 4-bit Quantization
+
+```python
 quantization_config = BitsAndBytesConfig(
     load_in_4bit=True,
-    bnb_4bit_compute_dtype=torch.float16,
+    bnb_4bit_compute_dtype=torch.bfloat16,
     bnb_4bit_quant_type="nf4",
     bnb_4bit_use_double_quant=True
 )
+```
 
-# Step 2: Load tokenizer and model
+Llama-3 8B at FP16 requires ~16 GB VRAM. This config compresses the weights to ~4 GB.
+
+| Parameter | What it does |
+|---|---|
+| `load_in_4bit=True` | Stores model weights as 4-bit integers instead of 16-bit floats |
+| `bnb_4bit_compute_dtype=torch.bfloat16` | Expands weights back to BF16 during math operations (better numerical stability than FP16 on Ampere GPUs) |
+| `bnb_4bit_quant_type="nf4"` | NormalFloat4 — designed for normally-distributed neural network weights, less error than generic FP4 |
+| `bnb_4bit_use_double_quant=True` | Applies a second quantization on the quantization constants, saving ~0.4 extra bits per parameter |
+
+---
+
+### Step 2 — Load Tokenizer and Model
+
+```python
 model_name = "meta-llama/Meta-Llama-3-8B"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model = AutoModelForCausalLM.from_pretrained(
@@ -591,15 +374,57 @@ model = AutoModelForCausalLM.from_pretrained(
     quantization_config=quantization_config,
     device_map="auto"
 )
+```
 
-# Step 3: Set to evaluation mode (CRITICAL!)
+The **tokenizer** converts text into Token IDs (integers) because the model only understands numbers, and converts them back when decoding:
+
+```
+"Hello world"  →  tokenizer  →  [15043, 3186]
+```
+
+| Parameter | What it does |
+|---|---|
+| `model_name` | Hugging Face Hub identifier — downloads the model on first run |
+| `quantization_config` | Applies the 4-bit compression from Step 1 during loading |
+| `device_map="auto"` | Automatically distributes model layers across available GPUs — no manual `.to("cuda")` needed |
+
+---
+
+### Step 3 — Set to Evaluation Mode
+
+```python
 model.eval()
+```
 
-# Step 4: Prepare input
+| Mode | When used | Behavior |
+|---|---|---|
+| `model.train()` | Training | Dropout randomly deactivates neurons; BatchNorm updates its statistics |
+| `model.eval()` | Inference | Dropout disabled; BatchNorm frozen |
+
+**Dropout** is a training technique that randomly silences a percentage of neurons to prevent overfitting. During inference it must be off — otherwise outputs are random and inconsistent on every call.
+
+---
+
+### Step 4 — Prepare Input
+
+```python
 prompt = "Explain the concept of Self-Attention in Transformers."
 inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
+```
 
-# Step 5: Run inference (CRITICAL: disable Autograd)
+| Part | What it does |
+|---|---|
+| `tokenizer(prompt, ...)` | Converts the string into Token IDs |
+| `return_tensors="pt"` | Returns PyTorch tensors (not Python lists or NumPy arrays) |
+| `.to("cuda")` | Moves input tensors from CPU RAM to GPU VRAM — model and inputs must be on the same device |
+
+Result: `{"input_ids": tensor([[128000, 849, 21435, ...]], device='cuda:0')}`
+
+---
+
+### Step 5 — Run Inference
+
+```python
 with torch.no_grad():
     outputs = model.generate(
         **inputs,
@@ -607,28 +432,82 @@ with torch.no_grad():
         temperature=0.7,
         do_sample=True
     )
+```
 
-# Step 6: Decode and print response
+**`torch.no_grad()`** disables Autograd for everything inside the block. During training, Autograd builds a computation graph to calculate gradients — during inference that graph wastes 2-3x VRAM that should go to the KV Cache.
+
+```
+Without torch.no_grad()  →  Computation graph builds  →  2-3x VRAM wasted  →  OOM
+With torch.no_grad()     →  No graph                  →  Minimal VRAM usage
+```
+
+| Parameter | What it does |
+|---|---|
+| `**inputs` | Unpacks the `input_ids` dict as keyword arguments |
+| `max_new_tokens=200` | Maximum tokens to generate (prompt tokens excluded) |
+| `temperature=0.7` | Randomness control: `< 1.0` = more focused, `> 1.0` = more creative, `1.0` = neutral |
+| `do_sample=True` | Enables sampling; required when `temperature != 1.0` (otherwise use greedy decoding) |
+
+**What `generate()` does internally:**
+
+```
+input tokens → 32 Decoder layers → logits (scores for 32,000 vocab tokens)
+→ softmax + temperature → sample next token → append to input → repeat
+```
+
+Loop repeats until `max_new_tokens` is reached or the model emits a stop token.
+
+---
+
+### Step 6 — Decode and Print Response
+
+```python
 response = tokenizer.decode(outputs[0], skip_special_tokens=True)
 print(response)
 ```
 
+| Part | What it does |
+|---|---|
+| `outputs[0]` | Selects the first sequence from the batch |
+| `tokenizer.decode(...)` | Converts Token IDs back into a human-readable string |
+| `skip_special_tokens=True` | Strips control tokens like `<\|begin_of_text\|>` and `<\|end_of_text\|>` |
+
 ---
 
-## 12. Key Certification Takeaways (MLA-C01)
+### Complete Execution Flow
 
-### Must-Know Concepts
+```
+Text prompt
+    ↓  tokenizer()
+Token IDs tensor on CUDA
+    ↓  model.generate()
+       ↳ 32 Decoder layers (Self-Attention + FFN) × N tokens
+Output Token IDs tensor
+    ↓  tokenizer.decode()
+Text response
+```
+
+### What Breaks If You Skip Each Critical Step
+
+| Step | Consequence |
+|---|---|
+| `model.eval()` | Dropout randomly degrades outputs — non-deterministic results every run |
+| `torch.no_grad()` | Autograd fills VRAM with computation graph → OOM during generation |
+| `.to("cuda")` | Inputs on CPU, model on GPU → device mismatch runtime error |
+
+---
+
+## 9. Key Certification Takeaways (MLA-C01)
 
 1. **Transformer Architecture:** Three types (Encoder, Decoder, Encoder-Decoder) and when to use each
 2. **Memory Math:** `parameters × bytes_per_param = VRAM required`
-3. **Quantization:** NF4 reduces memory 4x vs FP16. Cost optimization strategy
+3. **Quantization:** NF4 reduces memory 4x vs FP16 — primary cost optimization strategy
 4. **RAG vs Fine-Tuning:** RAG for facts, Fine-Tuning for behavior/tone
-5. **Infrastructure as Code:** Terraform/CloudFormation for ML infra. Tagging for cost allocation
-6. **Autograd:** Training requires Computation Graph (more VRAM). Inference requires `torch.no_grad()`
-7. **nn.Module:** `model.eval()` disables Dropout. Mandatory before inference
-8. **Service Quotas:** GPU quotas restricted by default. Plan ahead
-9. **AWS Budgets:** Configure billing alerts to prevent runaway costs
-10. **Instance Selection:** Match GPU specs to model size and workload type
+5. **Autograd:** Training requires Computation Graph (more VRAM). Inference requires `torch.no_grad()`
+6. **nn.Module:** `model.eval()` disables Dropout — mandatory before inference
+7. **Service Quotas:** GPU quotas are 0 by default on new accounts — request early
+8. **AWS Budgets:** Configure billing alerts to prevent runaway costs
+9. **Instance Selection:** Match GPU VRAM to model size + KV Cache requirements
 
 ### MLA-C01 Exam Alignment (Week 1)
 
@@ -643,7 +522,7 @@ print(response)
 
 ---
 
-## 13. Glossary
+## 10. Glossary
 
 | Term | Definition |
 |---|---|
@@ -668,4 +547,4 @@ print(response)
 
 ---
 
-*Document generated for study and review purposes. AWS MLA-C01 exam preparation.*
+*Study reference for AWS MLA-C01 exam preparation.*

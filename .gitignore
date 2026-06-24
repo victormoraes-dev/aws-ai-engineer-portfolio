@@ -220,5 +220,8 @@ __marimo__/
 
 # Terraform
 *.tfstate
-*.tfstate.backup
+*.tfstate.*
 .terraform/
+
+# Venv
+*.venv/
