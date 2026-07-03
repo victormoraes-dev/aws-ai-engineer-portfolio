@@ -74,13 +74,23 @@ resource "aws_iam_role_policy_attachment" "sagemaker_full_access" {
   policy_arn = "arn:aws:iam::aws:policy/AmazonSageMakerFullAccess"
 }
 
+# KMS key for SageMaker notebook encryption at rest
+# amazonq-ignore-next-line
+resource "aws_kms_key" "sagemaker_notebook" {
+  description             = "KMS key for SageMaker notebook instance encryption"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+  tags                    = local.tags
+}
+
 # SageMaker Notebook Instance
 resource "aws_sagemaker_notebook_instance" "main" {
   name                   = "ml-g5-2xlarge-notebook"
   role_arn               = aws_iam_role.sagemaker_execution_role.arn
   instance_type          = "ml.g5.2xlarge"
-  # instance_type          = "ml.t3.medium"  
+  # instance_type          = "ml.t3.medium"
   volume_size            = 50
+  kms_key_id             = aws_kms_key.sagemaker_notebook.arn
   direct_internet_access = "Enabled"
   instance_metadata_service_configuration {
     minimum_instance_metadata_service_version = "2"
