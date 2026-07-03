@@ -1,68 +1,61 @@
-# Week 1, Day 1 — Review: Foundations of AI Engineering
+# Week 1, Day 1 — Transformer Architecture & Self-Attention
 
-*Study reference for the AWS Certified Machine Learning Engineer - Associate (MLA-C01)*
+*Part of a 4-week accelerated program to build a production-grade AI engineering portfolio and earn the AWS Certified Machine Learning Engineer - Associate (MLA-C01) certification.*
 
 ---
 
 ## Table of Contents
 
-1. [Course Roadmap Overview](#1-course-roadmap-overview)
-2. [Transformer Architecture & Self-Attention](#2-transformer-architecture--self-attention)
-3. [The Inference Pipeline](#3-the-inference-pipeline)
-4. [GPU VRAM Physics & Quantization](#4-gpu-vram-physics--quantization)
-5. [RAG Architecture](#5-rag-architecture-retrieval-augmented-generation)
-6. [PyTorch Learning Ladder](#6-pytorch-learning-ladder)
-7. [GPU Validation Script](#7-gpu-validation-script)
-8. [inference.py — Line-by-Line Breakdown](#8-inferencepy--line-by-line-breakdown)
-9. [Key Certification Takeaways (MLA-C01)](#9-key-certification-takeaways-mla-c01)
-10. [Glossary](#10-glossary)
+1. [What Was Built](#1-what-was-built)
+2. [The Problem With Older Models](#2-the-problem-with-older-models)
+3. [The Transformer Solution](#3-the-transformer-solution)
+4. [How Inference Actually Works](#4-how-inference-actually-works)
+5. [The Hardware Reality: VRAM & Quantization](#5-the-hardware-reality-vram--quantization)
+6. [PyTorch: From Tensors to Neural Networks](#6-pytorch-from-tensors-to-neural-networks)
+7. [The Inference Script: Line by Line](#7-the-inference-script-line-by-line)
+8. [Glossary](#8-glossary)
 
 ---
 
-## 1. Course Roadmap Overview
+## 1. What Was Built
 
-A 4-week accelerated program designed to build a production-grade AI portfolio and earn the **AWS Certified Machine Learning Engineer - Associate (MLA-C01)** certification.
+On the first day, the goal was to go from zero to a working Llama-3 8B inference script running on a GPU — and to understand every line of code well enough to explain it to someone else.
 
-**Week 1: Fine-Tuning & Prompting** — Creation of a specialized Llama-3 8B assistant using PEFT/LoRA and quantization techniques.
+The deliverables were:
+- A repository with a structured project layout
+- A GPU validation notebook confirming CUDA availability on the target hardware
+- An `inference.py` script that loads Llama-3 8B with 4-bit quantization and generates a response to a text prompt
 
-### Weekly Schedule (Week 1)
+Before writing any code, the foundational theory was studied: why Transformers replaced RNNs, how Self-Attention works, and what actually happens inside the model when a prompt is submitted.
+
+**Week 1 at a glance:**
 
 | Day | Focus | Deliverable |
 |---|---|---|
-| **Monday** | Transformer/Attention theory, PyTorch setup, basic inference | Repository, notebook, GPU validation |
-| **Tuesday** | Data preparation, tokenization, embeddings | JSONL dataset for fine-tuning |
-| **Wednesday** | Prompt engineering on AWS Bedrock | Zero-shot vs Few-shot baselines |
-| **Thursday** | PEFT/LoRA fine-tuning | Trained LoRA adapters |
-| **Friday** | 4-bit quantization optimization | Quantized model, cost analysis |
-
-### Exam Domains (MLA-C01)
-
-| Domain | Weight | Week 1 Lab |
-|---|---|---|
-| Domain 1: Data Preparation | 28% | Tuesday (Tokenization, JSONL) |
-| Domain 2: ML Model Development | 26% | Thursday (LoRA fine-tuning) |
-| Domain 3: Deployment & Orchestration | 22% | SageMaker instance provisioning |
-| Domain 4: Monitoring & Security | 24% | Cost analysis, budgets |
-
-**Target:** Score **720/1000** to pass.
+| Monday | Transformer theory, PyTorch setup, basic inference | Repository, notebook, GPU validation |
+| Tuesday | Data preparation, tokenization, embeddings | JSONL dataset for fine-tuning |
+| Wednesday | Prompt engineering baseline | Zero-shot vs Few-shot evaluation |
+| Thursday | PEFT/LoRA fine-tuning | Trained LoRA adapters |
+| Friday | 4-bit quantization optimization | Quantized model, cost analysis |
 
 ---
 
-## 2. Transformer Architecture & Self-Attention
+## 2. The Problem With Older Models
 
-### The Problem with Older Models
+Before Transformers, the dominant architectures for language tasks were RNNs (Recurrent Neural Networks) and LSTMs (Long Short-Term Memory networks). Both process text **sequentially** — one word at a time, left to right.
 
-RNNs and LSTMs process text sequentially (word-by-word, left-to-right). This creates a computational bottleneck because they cannot parallelize across GPUs effectively.
+This created two fundamental problems:
 
-### The Transformer Solution
+1. **No parallelization.** Because each word depended on the previous one, the computation could not be distributed across GPU cores. Training was slow and expensive.
+2. **Vanishing gradients over long sequences.** Information from early tokens degraded as the sequence grew longer, making it hard for the model to connect a pronoun at position 200 to the noun it referred to at position 5.
 
-Introduced in the paper *"Attention Is All You Need"* (Vaswani et al., 2017). The Transformer processes the **entire sequence simultaneously** using the **Self-Attention mechanism**, enabling massive parallelization across GPU hardware.
+---
 
-### Self-Attention Mechanism
+## 3. The Transformer Solution
 
-- Calculates an **attention score** (weight) between every word in a sequence at the same time
-- Allows the model to capture deep contextual relationships regardless of token distance
-- Every token can "see" every other token in the sequence
+The Transformer architecture, introduced in *"Attention Is All You Need"* (Vaswani et al., 2017), solved both problems with a single mechanism: **Self-Attention**.
+
+Instead of processing tokens one by one, the Transformer processes the **entire sequence simultaneously**. Every token calculates an attention score against every other token at the same time — enabling full GPU parallelization and capturing long-range dependencies regardless of distance.
 
 ### The Three Transformer Architectures
 
@@ -72,19 +65,15 @@ Introduced in the paper *"Attention Is All You Need"* (Vaswani et al., 2017). Th
 | **Decoder-Only** | Llama-3, GPT-4 | Auto-regressive text generation, Chatbots |
 | **Encoder-Decoder** | T5, BART | Translation, Summarization |
 
-### Why Decoder-Only?
+### Why Llama-3 Uses Decoder-Only
 
-Llama-3 uses a **Decoder-Only** architecture because its sole objective is **auto-regressive generation** (predicting the next token). The Decoder has its own Self-Attention mechanism (Masked Self-Attention) to understand the prompt, making a separate Encoder unnecessary for generative tasks.
-
-### Causal (Masked) Self-Attention
-
-In a Decoder-Only model, each token can only attend to itself and previous tokens — never future tokens. This is enforced by a triangular mask matrix that sets future positions to `-infinity` before softmax.
+Llama-3's sole objective is **auto-regressive generation** — predicting the next token given all previous tokens. The Decoder has its own Masked Self-Attention mechanism to understand the prompt, making a separate Encoder unnecessary. Each token can only attend to itself and previous tokens, enforced by a triangular mask that sets future positions to `-infinity` before softmax.
 
 ---
 
-## 3. The Inference Pipeline
+## 4. How Inference Actually Works
 
-The lifecycle of a single prompt through Llama-3:
+The lifecycle of a single prompt through Llama-3 8B:
 
 ```
 "Hello world"  →  Tokenizer  →  [15043, 3186]  →  Model (GPU)  →  [2990]  →  Tokenizer  →  "!"
@@ -104,7 +93,9 @@ The lifecycle of a single prompt through Llama-3:
 
 ---
 
-## 4. GPU VRAM Physics & Quantization
+## 5. The Hardware Reality: VRAM & Quantization
+
+One of the first practical challenges was understanding why a model with 8 billion parameters doesn't just "run" on any machine.
 
 ### Memory Requirements for Llama-3 8B
 
@@ -116,7 +107,7 @@ The lifecycle of a single prompt through Llama-3:
 
 ### The KV Cache Problem
 
-The **KV Cache** (Key-Value Cache) stores the mathematical representations of all previous tokens to avoid recalculating them for each new token. It grows **linearly with context length**:
+The **KV Cache** stores the mathematical representations of all previous tokens to avoid recalculating them on each generation step. It grows linearly with context length:
 
 ```
 KV Cache Size ≈ 2 × num_layers × hidden_dim × seq_len × precision_bytes
@@ -126,11 +117,11 @@ For Llama-3 8B (32 layers, 4096 hidden dim):
 - 4K context → ~2 GB at FP16
 - 32K context → ~16 GB at FP16
 
-This is the **primary cause of CUDA Out of Memory (OOM) errors** during long context windows.
+This is the primary cause of CUDA Out of Memory (OOM) errors during long conversations.
 
 ### Solution: 4-bit Quantization (NF4)
 
-Uses the `bitsandbytes` library to compress model weights from ~16 GB to ~4 GB, freeing **~12 GB of VRAM** for the KV Cache and long context windows.
+Using the `bitsandbytes` library, model weights are compressed from ~16 GB to ~4 GB — freeing ~12 GB of VRAM for the KV Cache and enabling long context windows on accessible hardware.
 
 ### Target Hardware
 
@@ -140,46 +131,13 @@ Uses the `bitsandbytes` library to compress model weights from ~16 GB to ~4 GB, 
 
 ---
 
-## 5. RAG Architecture (Retrieval-Augmented Generation)
+## 6. PyTorch: From Tensors to Neural Networks
 
-### The Problem
+Three PyTorch concepts were studied in depth because they appear in every training and inference script.
 
-A 500-page PDF cannot be fed entirely into the LLM's context window — the KV Cache would explode and OOM.
+### Tensors & CUDA
 
-### The RAG Solution
-
-Instead of sending the entire document, RAG retrieves only the relevant chunks:
-
-1. **Chunking** — Split the document into small segments (256-512 tokens each)
-2. **Embedding** — Convert each chunk into a vector representation
-3. **Storage** — Store embeddings in a Vector Database (Amazon OpenSearch Serverless, Pinecone)
-4. **Retrieval** — User query is embedded, find the 3-5 most similar chunks
-5. **Generation** — Query + retrieved chunks are sent to the LLM as context
-
-### AWS Services for RAG
-
-| Service | Role |
-|---|---|
-| **Amazon OpenSearch Serverless** | Vector database for similarity search |
-| **Amazon Kendra** | Managed enterprise search |
-| **Amazon Bedrock Knowledge Bases** | Fully managed, serverless RAG |
-
-### RAG vs Fine-Tuning
-
-| Aspect | RAG | Fine-Tuning |
-|---|---|---|
-| Knowledge source | External documents | Model weights |
-| Update cost | Re-index documents | Re-train model |
-| Hallucination risk | Lower (grounded in retrieved text) | Higher |
-| Best for | Facts, policies, documentation | Tone, style, behavior |
-
----
-
-## 6. PyTorch Learning Ladder
-
-### Level 1: Tensors & CUDA
-
-**Concept:** PyTorch processes **Tensors** — multi-dimensional matrices.
+PyTorch processes **Tensors** — multi-dimensional matrices that can live on a GPU.
 
 | Type | Dimension | Example |
 |---|---|---|
@@ -188,11 +146,7 @@ Instead of sending the entire document, RAG retrieves only the relevant chunks:
 | Matrix | 2D | `tensor([[1,2],[3,4]])` |
 | Tensor | 3D+ | `tensor([[[...]]])` |
 
-**Why GPU?**
-- CPU: ~8-16 powerful cores, sequential processing
-- GPU (NVIDIA A10G): **9,216 CUDA cores**, parallel processing
-
-**CUDA Cores:** Individual processing units that execute one arithmetic operation at a time. PyTorch ships tensors to CUDA cores via `tensor.to("cuda")`.
+The distinction between CUDA and PyTorch matters: **CUDA** is NVIDIA's parallel computing platform — the hardware abstraction layer. **PyTorch** is the Python framework that packages neural network math specifically for CUDA core execution. PyTorch's C++ backend (ATen) calls the CUDA driver, which schedules work across thousands of cores.
 
 ```python
 import torch
@@ -202,22 +156,12 @@ if torch.cuda.is_available():
     x = x.to("cuda")
 ```
 
-**CUDA vs PyTorch:**
-- **CUDA** is NVIDIA's parallel computing platform/API — the hardware abstraction layer
-- **PyTorch** is the Python framework that packages neural network math specifically for CUDA core execution
-- PyTorch's C++ backend (ATen) calls the CUDA driver, which schedules work across thousands of cores
+### Autograd (Automatic Differentiation)
 
----
+Training requires gradients — derivatives of the loss with respect to every parameter. Doing this manually for 8 billion parameters is impossible. Autograd solves this by building a **Dynamic Computation Graph** during the forward pass:
 
-### Level 2: Autograd (Automatic Differentiation)
-
-**The Problem:** Training requires gradients (derivatives) of the loss with respect to every parameter. Doing this manually for 8 billion parameters is impossible.
-
-**The Solution:** Autograd builds a **Dynamic Computation Graph** (a Directed Acyclic Graph) during the Forward Pass:
-
-- Each mathematical operation is recorded as a **node**
-- Each node stores: operation type, input tensors, and the **gradient function** (the derivative)
-- When `loss.backward()` is called, Autograd traverses the graph **in reverse**, applying the **Chain Rule** at each node
+- Each operation is recorded as a node
+- When `loss.backward()` is called, Autograd traverses the graph in reverse, applying the Chain Rule at each node
 - Each parameter receives its `.grad` attribute with the exact direction and magnitude for weight updates
 
 ```python
@@ -227,17 +171,11 @@ y.backward()              # Backward pass: computes gradients
 print(x.grad)             # dy/dx = 2x + 3 = 7.0
 ```
 
-**[CERTIFICATION FOCUS]**
-- **Training:** Autograd enabled → Computation Graph built → 2-3x VRAM consumption
-- **Inference:** Autograd disabled via `torch.no_grad()` → No graph built → VRAM reserved for KV Cache
+During inference, Autograd is disabled via `torch.no_grad()` — no graph is built, and VRAM is reserved for the KV Cache instead.
 
----
+### nn.Module Architecture
 
-### Level 3: nn.Module Architecture
-
-**The Problem:** Managing 8 billion parameters manually is impossible. We need a standardized blueprint.
-
-**The Solution:** `nn.Module` is a base class providing a blueprint for building neural networks.
+`nn.Module` is PyTorch's base class for building neural networks — a standardized blueprint for managing billions of parameters.
 
 ```python
 import torch.nn as nn
@@ -265,62 +203,13 @@ class MyModel(nn.Module):
 | `.parameters()` | Inventory of all materials used |
 | `.to("cuda")` | Moving construction to a specialized facility |
 
-**How Llama-3 Uses nn.Module (Simplified):**
-
-```python
-class LlamaForCausalLM(nn.Module):
-    def __init__(self):
-        self.model = LlamaModel()          # 32 Decoder layers
-        self.lm_head = nn.Linear(4096, 32000)
-
-    def forward(self, input_ids):
-        hidden_states = self.model(input_ids)
-        logits = self.lm_head(hidden_states)
-        return logits
-```
-
 ---
 
-## 7. GPU Validation Script
-
-Run this inside a SageMaker PyTorch notebook to verify CUDA availability:
-
-```python
-import torch
-
-def check_cuda():
-    print(f"PyTorch version: {torch.__version__}")
-    print(f"CUDA available: {torch.cuda.is_available()}")
-
-    if torch.cuda.is_available():
-        print(f"CUDA version: {torch.version.cuda}")
-        print(f"Number of GPUs: {torch.cuda.device_count()}")
-
-        for i in range(torch.cuda.device_count()):
-            props = torch.cuda.get_device_properties(i)
-            print(f"\n--- GPU {i} ---")
-            print(f"Name: {props.name}")
-            print(f"Compute Capability: {props.major}.{props.minor}")
-            print(f"Total Memory: {props.total_memory / 1024**3:.2f} GB")
-            print(f"Multi-Processor Count: {props.multi_processor_count}")
-
-check_cuda()
-
-# Expected output:
-# CUDA available: True
-# GPU 0: NVIDIA A10G
-# Total Memory: 23.65 GB
-```
-
----
-
-## 8. inference.py — Line-by-Line Breakdown
+## 7. The Inference Script: Line by Line
 
 The script answers one question: **"Given a text prompt, how do I get a response from Llama-3 8B on a GPU?"**
 
 Flow: configure memory → load model → set inference mode → tokenize input → generate output → decode output.
-
----
 
 ### Imports
 
@@ -340,8 +229,6 @@ from transformers import (
 | `AutoModelForCausalLM` | Loads a Causal Language Model (text generation) |
 | `BitsAndBytesConfig` | Configuration for 4-bit quantization via the `bitsandbytes` library |
 
----
-
 ### Step 1 — Configure 4-bit Quantization
 
 ```python
@@ -358,11 +245,9 @@ Llama-3 8B at FP16 requires ~16 GB VRAM. This config compresses the weights to ~
 | Parameter | What it does |
 |---|---|
 | `load_in_4bit=True` | Stores model weights as 4-bit integers instead of 16-bit floats |
-| `bnb_4bit_compute_dtype=torch.bfloat16` | Expands weights back to BF16 during math operations (better numerical stability than FP16 on Ampere GPUs) |
-| `bnb_4bit_quant_type="nf4"` | NormalFloat4 — designed for normally-distributed neural network weights, less error than generic FP4 |
+| `bnb_4bit_compute_dtype=torch.bfloat16` | Expands weights back to BF16 during math operations for numerical stability |
+| `bnb_4bit_quant_type="nf4"` | NormalFloat4 — designed for normally-distributed neural network weights |
 | `bnb_4bit_use_double_quant=True` | Applies a second quantization on the quantization constants, saving ~0.4 extra bits per parameter |
-
----
 
 ### Step 2 — Load Tokenizer and Model
 
@@ -376,7 +261,7 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-The **tokenizer** converts text into Token IDs (integers) because the model only understands numbers, and converts them back when decoding:
+The tokenizer converts text into Token IDs because the model only understands numbers:
 
 ```
 "Hello world"  →  tokenizer  →  [15043, 3186]
@@ -386,9 +271,7 @@ The **tokenizer** converts text into Token IDs (integers) because the model only
 |---|---|
 | `model_name` | Hugging Face Hub identifier — downloads the model on first run |
 | `quantization_config` | Applies the 4-bit compression from Step 1 during loading |
-| `device_map="auto"` | Automatically distributes model layers across available GPUs — no manual `.to("cuda")` needed |
-
----
+| `device_map="auto"` | Automatically distributes model layers across available GPUs |
 
 ### Step 3 — Set to Evaluation Mode
 
@@ -401,9 +284,7 @@ model.eval()
 | `model.train()` | Training | Dropout randomly deactivates neurons; BatchNorm updates its statistics |
 | `model.eval()` | Inference | Dropout disabled; BatchNorm frozen |
 
-**Dropout** is a training technique that randomly silences a percentage of neurons to prevent overfitting. During inference it must be off — otherwise outputs are random and inconsistent on every call.
-
----
+Dropout is a training technique that randomly silences neurons to prevent overfitting. During inference it must be off — otherwise outputs are non-deterministic on every call.
 
 ### Step 4 — Prepare Input
 
@@ -415,12 +296,8 @@ inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
 | Part | What it does |
 |---|---|
 | `tokenizer(prompt, ...)` | Converts the string into Token IDs |
-| `return_tensors="pt"` | Returns PyTorch tensors (not Python lists or NumPy arrays) |
+| `return_tensors="pt"` | Returns PyTorch tensors |
 | `.to("cuda")` | Moves input tensors from CPU RAM to GPU VRAM — model and inputs must be on the same device |
-
-Result: `{"input_ids": tensor([[128000, 849, 21435, ...]], device='cuda:0')}`
-
----
 
 ### Step 5 — Run Inference
 
@@ -434,30 +311,13 @@ with torch.no_grad():
     )
 ```
 
-**`torch.no_grad()`** disables Autograd for everything inside the block. During training, Autograd builds a computation graph to calculate gradients — during inference that graph wastes 2-3x VRAM that should go to the KV Cache.
-
-```
-Without torch.no_grad()  →  Computation graph builds  →  2-3x VRAM wasted  →  OOM
-With torch.no_grad()     →  No graph                  →  Minimal VRAM usage
-```
+`torch.no_grad()` disables Autograd for everything inside the block. Without it, the computation graph fills VRAM and causes OOM errors during generation.
 
 | Parameter | What it does |
 |---|---|
-| `**inputs` | Unpacks the `input_ids` dict as keyword arguments |
 | `max_new_tokens=200` | Maximum tokens to generate (prompt tokens excluded) |
-| `temperature=0.7` | Randomness control: `< 1.0` = more focused, `> 1.0` = more creative, `1.0` = neutral |
-| `do_sample=True` | Enables sampling; required when `temperature != 1.0` (otherwise use greedy decoding) |
-
-**What `generate()` does internally:**
-
-```
-input tokens → 32 Decoder layers → logits (scores for 32,000 vocab tokens)
-→ softmax + temperature → sample next token → append to input → repeat
-```
-
-Loop repeats until `max_new_tokens` is reached or the model emits a stop token.
-
----
+| `temperature=0.7` | Randomness control: `< 1.0` = more focused, `> 1.0` = more creative |
+| `do_sample=True` | Enables sampling; required when `temperature != 1.0` |
 
 ### Step 6 — Decode and Print Response
 
@@ -471,8 +331,6 @@ print(response)
 | `outputs[0]` | Selects the first sequence from the batch |
 | `tokenizer.decode(...)` | Converts Token IDs back into a human-readable string |
 | `skip_special_tokens=True` | Strips control tokens like `<\|begin_of_text\|>` and `<\|end_of_text\|>` |
-
----
 
 ### Complete Execution Flow
 
@@ -497,32 +355,7 @@ Text response
 
 ---
 
-## 9. Key Certification Takeaways (MLA-C01)
-
-1. **Transformer Architecture:** Three types (Encoder, Decoder, Encoder-Decoder) and when to use each
-2. **Memory Math:** `parameters × bytes_per_param = VRAM required`
-3. **Quantization:** NF4 reduces memory 4x vs FP16 — primary cost optimization strategy
-4. **RAG vs Fine-Tuning:** RAG for facts, Fine-Tuning for behavior/tone
-5. **Autograd:** Training requires Computation Graph (more VRAM). Inference requires `torch.no_grad()`
-6. **nn.Module:** `model.eval()` disables Dropout — mandatory before inference
-7. **Service Quotas:** GPU quotas are 0 by default on new accounts — request early
-8. **AWS Budgets:** Configure billing alerts to prevent runaway costs
-9. **Instance Selection:** Match GPU VRAM to model size + KV Cache requirements
-
-### MLA-C01 Exam Alignment (Week 1)
-
-| Task | Domain | Day |
-|---|---|---|
-| Data ingestion and formatting | Domain 1 (28%) | Tue — JSONL dataset |
-| Tokenization and embeddings | Domain 1 (28%) | Tue — Dataset prep |
-| Model selection (Decoder-Only) | Domain 2 (26%) | Wed — Prompt baselines |
-| Training and fine-tuning | Domain 2 (26%) | Thu — LoRA PEFT |
-| Model evaluation and optimization | Domain 2 (26%) | Fri — Quantization benchmarks |
-| Cost optimization | Domain 4 (24%) | Fri — Quantization for cost reduction |
-
----
-
-## 10. Glossary
+## 8. Glossary
 
 | Term | Definition |
 |---|---|
@@ -531,7 +364,6 @@ Text response
 | **CUDA** | NVIDIA's parallel computing platform for GPU programming |
 | **CUDA Core** | Individual parallel processor inside an NVIDIA GPU |
 | **Decoder-Only** | Architecture for auto-regressive text generation |
-| **DAG** | Directed Acyclic Graph (the Computation Graph structure) |
 | **KV Cache** | Stores previous token keys/values to avoid recalculation |
 | **LoRA** | Low-Rank Adaptation — PEFT method for fine-tuning |
 | **NF4** | 4-bit NormalFloat quantization format |
@@ -539,12 +371,8 @@ Text response
 | **PEFT** | Parameter-Efficient Fine-Tuning |
 | **Quantization** | Reducing precision of model weights to save memory |
 | **RAG** | Retrieval-Augmented Generation |
-| **Self-Attention** | Mechanism allowing tokens to attend to all other tokens |
+| **Self-Attention** | Mechanism allowing tokens to attend to all other tokens simultaneously |
 | **Tensor** | Multi-dimensional array (fundamental PyTorch data structure) |
 | **Token** | Unit of text (word piece, subword) |
 | **Tokenizer** | Converts text to Token IDs and vice versa |
 | **VRAM** | Video RAM — GPU memory |
-
----
-
-*Study reference for AWS MLA-C01 exam preparation.*

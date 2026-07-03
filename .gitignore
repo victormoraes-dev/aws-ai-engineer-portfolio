@@ -225,3 +225,12 @@ __marimo__/
 
 # Venv
 *.venv/
+
+# Large files
+sagemaker-developer-guide.pdf
+*.pdf
+
+# ChromaDB / vector store artifacts
+chroma_db/
+*.sqlite3
+*.bin
