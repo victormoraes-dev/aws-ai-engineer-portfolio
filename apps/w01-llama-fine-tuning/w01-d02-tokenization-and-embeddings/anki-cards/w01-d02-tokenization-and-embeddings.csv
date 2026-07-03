@@ -1,0 +1,10 @@
+What is the primary difference between a Tokenizer and an Embedding Model?;A tokenizer maps raw text to arbitrary integer IDs (no meaning), while an embedding model maps those IDs to dense vectors representing semantic meaning.
+Why is Cosine Similarity preferred over Euclidean Distance for semantic search in RAG applications?;Cosine similarity measures the angle (direction) between vectors, ignoring their magnitude. This prevents long documents from being penalized when compared to short queries.
+What is the purpose of Mean Pooling in an NLP embedding pipeline?;It averages the individual token embeddings of a sequence into a single, unified document-level vector representation.
+How does an Attention Mask function during the mean pooling process?;It acts as a binary filter (1s and 0s) to ensure that padding tokens are ignored and do not skew the average of the document vector.
+In the context of Amazon Bedrock and Titan Text Embeddings V2, how can you reduce vector database storage costs by up to 96%?;By utilizing Binary Embeddings, which compress float32 dimensions into 1-bit representations with minimal accuracy loss.
+What is the primary benefit of applying 4-bit quantization to a Large Language Model (LLM)?;It drastically reduces the GPU VRAM required to load and run the model (e.g., reducing a 16GB footprint to ~4GB) with minimal loss in performance.
+What do the dimensions (e.g., 1536 or 4096) of an embedding vector represent?;They represent latent semantic features learned by the model during training, defining the token's exact coordinates in a semantic meaning-space.
+Which AWS service natively uses cosine similarity by default to retrieve relevant document chunks for RAG architectures?;Amazon Bedrock Knowledge Bases.
+What is the purpose of using PCA and t-SNE on text embeddings?;To perform dimensionality reduction, allowing high-dimensional semantic vectors to be visualized and clustered in 2D or 3D space.
+If an MLA-C01 exam scenario requires deploying an LLM on an instance with limited GPU memory, what technique should be applied?;Model Quantization (e.g., 4-bit or 8-bit quantization).
