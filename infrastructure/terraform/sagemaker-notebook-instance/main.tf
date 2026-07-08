@@ -87,7 +87,8 @@ resource "aws_kms_key" "sagemaker_notebook" {
 resource "aws_sagemaker_notebook_instance" "main" {
   name                   = "ml-g5-2xlarge-notebook"
   role_arn               = aws_iam_role.sagemaker_execution_role.arn
-  instance_type          = "ml.g5.2xlarge"
+  # instance_type          = "ml.g5.2xlarge"
+  instance_type          = "ml.g4dn.xlarge"
   # instance_type          = "ml.t3.medium"
   volume_size            = 50
   kms_key_id             = aws_kms_key.sagemaker_notebook.arn
