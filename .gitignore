@@ -224,6 +224,7 @@ __marimo__/
 .terraform/
 *.tfvars
 *.tfvars.json
+*.terraform.lock.*
 
 # Venv
 *.venv/
@@ -236,3 +237,6 @@ sagemaker-developer-guide.pdf
 chroma_db/
 *.sqlite3
 *.bin
+
+#ZIP files
+*.zip
