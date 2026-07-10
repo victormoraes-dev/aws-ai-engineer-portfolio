@@ -1,3 +1,4 @@
+data "aws_caller_identity" "current" {}
 terraform {
   required_providers {
     aws = {
@@ -9,7 +10,7 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-2"
+  region = "us-east-1"
 }
 
 # Data source for the current AWS account and caller identity
@@ -75,21 +76,49 @@ resource "aws_iam_role_policy_attachment" "sagemaker_full_access" {
 }
 
 # KMS key for SageMaker notebook encryption at rest
-# amazonq-ignore-next-line
 resource "aws_kms_key" "sagemaker_notebook" {
   description             = "KMS key for SageMaker notebook instance encryption"
   deletion_window_in_days = 7
   enable_key_rotation     = true
-  tags                    = local.tags
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
+        }
+        Action   = "kms:*"
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow SageMaker to use the key"
+        Effect = "Allow"
+        Principal = {
+          Service = "sagemaker.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = local.tags
 }
 
 # SageMaker Notebook Instance
 resource "aws_sagemaker_notebook_instance" "main" {
   name                   = "ml-g5-2xlarge-notebook"
   role_arn               = aws_iam_role.sagemaker_execution_role.arn
-  # instance_type          = "ml.g5.2xlarge"
-  instance_type          = "ml.g4dn.xlarge"
-  # instance_type          = "ml.t3.medium"
+  instance_type          = "ml.g5.2xlarge"
   volume_size            = 50
   kms_key_id             = aws_kms_key.sagemaker_notebook.arn
   direct_internet_access = "Enabled"
