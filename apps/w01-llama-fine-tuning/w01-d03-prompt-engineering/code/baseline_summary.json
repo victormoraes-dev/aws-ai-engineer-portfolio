@@ -1,35 +1,35 @@
 {
-  "timestamp": "2026-06-24T11:49:22.694032",
+  "timestamp": "2026-07-14T09:39:36.283109",
   "model": "llama-3.1-8b-instant",
   "temperature": 0.1,
   "max_tokens": 256,
   "dataset_size": 15,
   "strategies": {
-    "A - Zero-Shot Direct": {
-      "rouge_l": 0.1447025537325957,
-      "rouge_1": 0.19133955161835314,
-      "rouge_2": 0.07298438418609934,
-      "avg_latency_s": 1.1,
-      "avg_output_tokens": 198.0
+    "A \u2014 Zero-Shot Direct": {
+      "rouge_l": 0.13782062253862332,
+      "rouge_1": 0.17938400253731374,
+      "rouge_2": 0.06433311374866993,
+      "avg_latency_s": 1.21,
+      "avg_output_tokens": 194.6
     },
-    "B - Zero-Shot Role": {
-      "rouge_l": 0.23910839431870798,
-      "rouge_1": 0.28113144023327663,
-      "rouge_2": 0.12303221013193513,
-      "avg_latency_s": 1.43,
-      "avg_output_tokens": 96.4
+    "B \u2014 Zero-Shot Role": {
+      "rouge_l": 0.22222666422378148,
+      "rouge_1": 0.27037307237968433,
+      "rouge_2": 0.11263975656350231,
+      "avg_latency_s": 1.09,
+      "avg_output_tokens": 103.7
     },
-    "C - Few-Shot": {
-      "rouge_l": 0.19864066277759626,
-      "rouge_1": 0.24408363192832833,
-      "rouge_2": 0.09819326732948577,
-      "avg_latency_s": 1.55,
-      "avg_output_tokens": 133.5
+    "C \u2014 Few-Shot": {
+      "rouge_l": 0.2132594447149999,
+      "rouge_1": 0.25762735977893614,
+      "rouge_2": 0.10670360023796191,
+      "avg_latency_s": 1.09,
+      "avg_output_tokens": 122.7
     }
   },
   "gaps": {
-    "a_to_c_rouge_l": 0.0539,
-    "a_to_c_rouge_1": 0.0527,
-    "a_to_c_rouge_2": 0.0252
+    "a_to_c_rouge_l": 0.0754,
+    "a_to_c_rouge_1": 0.0782,
+    "a_to_c_rouge_2": 0.0424
   }
 }
